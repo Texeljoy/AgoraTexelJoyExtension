@@ -9,6 +9,8 @@
 #import <UIKit/UIKit.h>
 #import <OpenGLES/gltypes.h>
 
+//#define HT_AVATAR_ENABLE true
+
 @protocol HTEffectDelegate <NSObject>
 
 /**
@@ -88,13 +90,13 @@
 @interface HTPoseDetectionReport : NSObject
 
 /// 人体骨骼关键点坐标
-@property (nonatomic, assign) CGPoint *keyPoints;
+@property (nonatomic, assign) int pointNum;
 
 /// 人体骨骼关键点3D坐标
-@property (nonatomic, assign) CGFloat *keyPoints3D;
+@property (nonatomic, assign) CGPoint *keyPoints;
 
 /// 人体区域坐标
-@property (nonatomic, assign) CGRect rect;
+@property (nonatomic, assign) BOOL *detected;
 
 @end
 
@@ -188,26 +190,27 @@ typedef NS_ENUM(NSInteger, HTARItemTypes) {
     HTItemSticker   = 0, //!< 2D贴纸
     HTItemMask      = 1, //!< 面具
     HTItemGift      = 2, //!< 礼物
-    HTItemWatermark = 3  //!< 水印
+    HTItemWatermark = 3, //!< 水印
+    HTItemAvater    = 4  //!< Avatar
 };
 
-/**
- * 推荐妆容推荐类型枚举
- * 3.0版本后，将风格推荐效果改为妆容推荐；
- *
- * 在调用妆容推荐设置接口时，设置类型
- */
-typedef NS_ENUM(NSInteger, HTStyleTypes) {
-    HTStyleTypeNone   = 0,  //!< 无，HTEffect UI显示名称为"无"
-    HTStyleTypeOne   = 1,  //!< 妆容一，HTEffect UI显示名称为"清纯白花"
-    HTStyleTypeTwo   = 2,  //!< 妆容二，HTEffect UI显示名称为"狐系美人"
-    HTStyleTypeThree = 3,  //!< 妆容三，HTEffect UI显示名称为"清甜妆"
-    HTStyleTypeFour  = 4,  //!< 妆容四，HTEffect UI显示名称为"白露"
-    HTStyleTypeFive  = 5,  //!< 妆容五，HTEffect UI显示名称为"冷调"
-    HTStyleTypeSix   = 6,  //!< 妆容六，HTEffect UI显示名称为"元气少女"
-    HTStyleTypeSeven = 7,  //!< 妆容七，HTEffect UI显示名称为"女团"
-    HTStyleTypeEight = 8  //!< 妆容八，HTEffect UI显示名称为"纯欲妆"
-};
+///**
+// * 推荐妆容推荐类型枚举
+// * 3.0版本后，将风格推荐效果改为妆容推荐；
+// *
+// * 在调用妆容推荐设置接口时，设置类型
+// */
+//typedef NS_ENUM(NSInteger, HTStyleTypes) {
+//    HTStyleTypeNone   = 0,  //!< 无，HTEffect UI显示名称为"无"
+//    HTStyleTypeOne   = 1,  //!< 妆容一，HTEffect UI显示名称为"清纯白花"
+//    HTStyleTypeTwo   = 2,  //!< 妆容二，HTEffect UI显示名称为"狐系美人"
+//    HTStyleTypeThree = 3,  //!< 妆容三，HTEffect UI显示名称为"清甜妆"
+//    HTStyleTypeFour  = 4,  //!< 妆容四，HTEffect UI显示名称为"白露"
+//    HTStyleTypeFive  = 5,  //!< 妆容五，HTEffect UI显示名称为"冷调"
+//    HTStyleTypeSix   = 6,  //!< 妆容六，HTEffect UI显示名称为"元气少女"
+//    HTStyleTypeSeven = 7,  //!< 妆容七，HTEffect UI显示名称为"女团"
+//    HTStyleTypeEight = 8  //!< 妆容八，HTEffect UI显示名称为"纯欲妆"
+//};
 
 /**
  * 美妆类型枚举
@@ -285,12 +288,34 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
     HTGestureNoGesture      = 18
 };
 
+/**
+ * AI驱动类型枚举
+ */
+typedef NS_ENUM(NSInteger, HTAITypes) {
+    HTAIFace106         = 0, //!< 人脸106关键点检测
+    HTAIFace278         = 1, //!< 人脸278关键点检测
+    HTAIHairParser      = 2, //!< 头发分割
+    HTAIPortraitMatting = 3, //!< 人像分割
+    HTAIHand            = 4, //!< 人手检测
+    HTAIPose            = 5  //!< 人体检测
+};
+
 #pragma mark - 单例
 
 /**
  * 单例
  */
 + (HTEffect *)shareInstance;
+
+#pragma mark - 鉴权相关设置
+
+/**
+ * 设置鉴权网络节点
+ *
+ * @param node 节点名称，默认"cn"，国内节点
+ *             "sg"，海外节点-新加坡
+ */
+- (void)setAuthNetworkNode:(NSString *)node;
 
 #pragma mark - 初始化
 
@@ -309,6 +334,25 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  * @return 鉴权结果返回值
  */
 - (int)initHTEffect:(NSString *)license;
+
+#pragma mark - 初始化（剥离AI驱动加载方法），3.4.0版本开始使用
+
+/**
+ * 鉴权方法 - 在线
+ *
+ * @param appId 在线鉴权appId
+ * @param delegate 代理
+ */
+- (void)authOnline:(NSString *)appId withDelegate:(id<HTEffectDelegate>)delegate;
+
+/**
+ * 鉴权方法 - 离线
+ *
+ * @param license 离线鉴权license
+ * @return 鉴权结果返回值
+ */
+- (int)authOffline:(NSString *)license;
+
 
 #pragma mark - 渲染处理
 
@@ -398,6 +442,21 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  */
 - (void)releaseImageRenderer;
 
+/**
+ * 渲染UIImage图片
+ * 该接口仅适用于图片渲染的场景，和processImage接口的区别在于无需初始化渲染器以及参数差异
+ *
+ * @param image 图片（UIImage格式）
+ *
+ * @return 渲染后的图片（UIImage格式）
+ */
+- (UIImage *)processUIImage:(UIImage *)image;
+
+/**
+ * 销毁UIImage图片渲染资源
+ */
+- (void)releaseUIImageRenderer;
+
 #pragma mark - 美肤
 
 /**
@@ -450,15 +509,39 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  */
 - (void)setFilter:(int)type name:(NSString *)name;
 
-#pragma mark - 妆容推荐
+/**
+ * 设置滤镜（新版本接口）
+ *
+ * @param type 滤镜类型，参考类型定义#HTFilterTypes
+ * @param name 滤镜名称，如果传null或者空字符，则取消滤镜效果
+ * @param value 滤镜强度，参数范围0-100
+ */
+- (void)setFilter:(int)type name:(NSString *)name value:(int)value;
+
+#pragma mark - (风格设置：妆容推荐|一键美颜)
 
 /**
- * 设置妆容推荐
- * 该接口使用需要同时支持美妆、滤镜特效
+ * 获取风格网络路径
  *
- * @param type 妆容类型，参考类型定义#HTStyleTypes
+ * @return 返回风格素材网络路径
  */
-- (void)setStyle:(int)type;
+- (NSString *)getStyleUrl;
+
+/**
+ * 获取风格沙盒路径
+ *
+ * @return 返回风格素材沙盒路径
+ */
+- (NSString *)getStylePath;
+
+/**
+ * 设置风格
+ * 该接口为一键设置方法，可将多个特效组合设置，需留意所包含的特效是否具有权限
+ *
+ * @param name 风格名称
+ * @param value 风格参数，参数范围0-100，默认为100
+ */
+- (void)setStyle:(NSString *)name value:(int)value;
 
 #pragma mark - AR道具
 
@@ -496,10 +579,17 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  * @param y2 左下角纵坐标值
  * @param x3 右下角横坐标值
  * @param y3 右下角纵坐标值
- * @param x4 右下角横坐标值
- * @param y4 右下角纵坐标值
+ * @param x4 右上角横坐标值 
+ * @param y4 右上角纵坐标值
  */
 - (void)setWatermarkParam:(float)x1 y1:(float)y1 x2:(float)x2 y2:(float)y2 x3:(float)x3 y3:(float)y3 x4:(float)x4 y4:(float)y4;
+
+/**
+ * 设置AR道具-水印透明度参数函数
+ *
+ * @param value 透明度参数，0-100，默认100
+ */
+- (void)setWatermarkTransparency:(int)value;
 
 #pragma mark - 人像抠图 - AI抠图
 
@@ -618,11 +708,12 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
 /**
  * 设置美妆特效
  *
- * @param type 美妆类别
- * @param name 美妆名称
- * @param value 美妆参数
+ * @param type 美妆类型，参考#HTMakeupTypes
+ * @param key 美妆属性，参考接口模型文档
+ * @param value 美妆属性对应值，参考接口模型文档
+ *
  */
-- (void)setMakeup:(int)type name:(NSString *)name value:(int)value;
+- (void)setMakeup:(int)type property:(NSString *)key value:(NSString *)value;
 
 #pragma mark - 美体
 
@@ -635,6 +726,23 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
 - (void)setBodyBeauty:(int)type value:(int)value;
 
 #pragma mark - 算法
+
+/**
+ * 加载AI驱动
+ *
+ * @param type AI驱动类型，参考类型定义#HTAITypes
+ *
+ * @return 当前AI驱动类型是否加载成功
+ */
+- (bool)loadAIProcessor:(int)type;
+
+/**
+ * 卸载AI驱动
+ *
+ * @param type AI驱动类型，参考类型定义#HTAITypes
+ *
+ */
+- (void)removeAIProcessor:(int)type;
 
 /**
  * 判断是否检测到人脸
@@ -666,6 +774,15 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
 - (NSArray<HTPoseDetectionReport *> *)getPoseDetectionReport;
 
 #pragma mark - 其它
+/**
+ * 获取功能的参数值
+ *
+ * @param method 功能模块，参考API文档
+ * @param key 该功能模块的属性，参考API文档
+ *
+ * @return 功能模块的参数值，统一返回NSString类型，需根据具体参数类型转换，如NSString->int, NSString->float...
+ */
+- (NSString *)getParamFrom:(NSString *)method property:(NSString *)key;
 
 /**
  * 部分透明图渲染支持开关
@@ -673,6 +790,28 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  * @param enable 开启为true， 关闭为false， 默认关闭
  */
 - (void)setTransparencyRenderEnable:(BOOL)enable;
+
+/**
+ * 设置人脸检测器类型，默认为0
+ *
+ * @param type 人脸检测器类型
+ */
+- (void)setFaceDetectorType:(int)type;
+
+/**
+ * 设置人脸检测算法CPU多核运算开关，默认为false
+ *
+ * @param enable 开关，默认为false
+ */
+- (void)setFaceDetectionCPUPowersaveEnable:(BOOL)enable;
+
+/**
+ * 设置人脸检测距离级别，默认为1级，即能识别较近距离
+ * 此接口生效的前置条件是人脸检测算法Base模式为开启状态
+ *
+ * @param level 人脸检测距离级别，默认为1级
+ */
+- (void)setFaceDetectionDistanceLevel:(int)level;
 
 /**
  * 获取当前 SDK 版本号
@@ -692,6 +831,11 @@ typedef NS_ENUM(NSInteger, HTGestureEnum) {
  * 设置参数极值限制开关，默认为开
  */
 - (void)setExtremeLimitEnable:(BOOL)enable;
+
+/**
+ * 设置性能优先模式开关，默认为开
+ */
+- (void)setPerformancePriorityEnable:(BOOL)enable;
 
 /**
  * 设置素材网络路径
